@@ -1,0 +1,12 @@
+{
+  "name": "oca-aguia-dourada-workspace",
+  "private": true,
+  "scripts": {
+    "install:app": "npm --prefix app ci",
+    "dev": "npm --prefix app run dev",
+    "build": "npm --prefix app run build",
+    "test": "npm --prefix app test",
+    "typecheck": "npm --prefix app run typecheck",
+    "db:local": "npm --prefix app run db:local"
+  }
+}
