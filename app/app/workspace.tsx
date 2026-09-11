@@ -1,4 +1,6 @@
 'use client';
+import AccessGate from './access-gate';
+import InstallApp from './install-app';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   SidebarProvider,
@@ -263,6 +265,11 @@ export default function Workspace() {
       };
       if (!r.ok) {
         setAuth(!!d.auth);
+        if (d.auth) {
+          setS(emptyState());
+          setActor(null);
+          setModal('');
+        }
         throw new Error(d.error);
       }
       setS(d.state);
@@ -447,6 +454,14 @@ export default function Workspace() {
       };
       if (!response.ok) {
         if (response.status === 409) await refresh();
+        if (response.status === 401) {
+          setS(emptyState());
+          setActor(null);
+          setModal('');
+          setAuth(true);
+          setError('Sua sessão expirou. Informe o código novamente.');
+          return;
+        }
         throw new Error(d.error || 'Não foi possível salvar.');
       }
       setS(d.state);
@@ -524,7 +539,6 @@ export default function Workspace() {
     purchases: () => open('purchase', { discount: '0' }),
     finance: () => open('bill'),
     contacts: () => open('contact', { type: 'customer' }),
-    admin: () => open('member', { role: 'employee', active: true }),
   };
   const actionLabels: Record<string, string> = {
     overview: 'Registrar venda',
@@ -533,7 +547,6 @@ export default function Workspace() {
     purchases: 'Nova compra',
     finance: 'Novo lançamento',
     contacts: 'Novo contato',
-    admin: 'Liberar acesso',
   };
   const selection = s.products
     .filter((p) => p.active)
@@ -641,7 +654,6 @@ export default function Workspace() {
     settle: 'Registrar pagamento',
     account: 'Nova conta',
     transfer: 'Transferir entre contas',
-    member: 'Acesso à loja',
     contact: 'Cliente ou fornecedor',
     receive: 'Receber mercadorias',
     cancel: 'Cancelar e estornar operação',
@@ -693,20 +705,36 @@ export default function Workspace() {
               <small>
                 {actor
                   ? isOwner
-                    ? 'Proprietário'
+                    ? 'Acesso completo'
                     : 'Equipe'
                   : 'Gestão integrada'}
               </small>
             </div>
             {actor && (
-              <a
-                href="/signout-with-chatgpt?return_to=/"
-                target="_top"
+              <button
                 aria-label="Sair"
                 className="logout"
+                onClick={async () => {
+                  try {
+                    const r = await fetch('/api/access', { method: 'DELETE' });
+                    if (!r.ok)
+                      throw new Error(
+                        'Não foi possível sair. Tente novamente.',
+                      );
+                    setS(emptyState());
+                    setActor(null);
+                    setModal('');
+                    setAuth(true);
+                    setError('Informe o código para entrar.');
+                  } catch (e) {
+                    setNotice(
+                      e instanceof Error ? e.message : 'Não foi possível sair.',
+                    );
+                  }
+                }}
               >
                 <LogOut size={17} />
-              </a>
+              </button>
             )}
           </div>
         </SidebarFooter>
@@ -721,6 +749,7 @@ export default function Workspace() {
             </span>
           </span>
           <span className="store-chip">● Unidade principal</span>
+          <InstallApp />
           <button
             className="icon-button"
             aria-label="Atualizar dados"
@@ -752,6 +781,8 @@ export default function Workspace() {
               <LoaderCircle className="spin" size={30} />
               <h2>Carregando sua loja…</h2>
             </div>
+          ) : auth ? (
+            <AccessGate onSuccess={refresh} />
           ) : error ? (
             <section className="access panel">
               <img src="/logo-oficial.png" alt="OCA Águia Dourada" />
@@ -759,19 +790,9 @@ export default function Workspace() {
                 {auth ? 'Bem-vindo à OCA' : 'Não foi possível abrir a loja'}
               </h1>
               <p role="alert">{error}</p>
-              {auth ? (
-                <a
-                  className="primary"
-                  href="/signin-with-chatgpt?return_to=%2F"
-                  target="_top"
-                >
-                  Entrar com ChatGPT <ArrowRight size={18} />
-                </a>
-              ) : (
-                <button className="primary" onClick={() => void refresh()}>
-                  Tentar novamente
-                </button>
-              )}
+              <button className="primary" onClick={() => void refresh()}>
+                Tentar novamente
+              </button>
             </section>
           ) : (
             <>
@@ -1666,32 +1687,19 @@ export default function Workspace() {
                 <>
                   <div className="panel">
                     <div className="panel-heading">
-                      <h2>Acessos da equipe</h2>
-                      <Badge tone="green">Permissões no servidor</Badge>
+                      <h2>Acesso compartilhado</h2>
+                      <Badge tone="green">Acesso completo</Badge>
                     </div>
                     <p className="chart-caption">
-                      O funcionário acessa produtos, ajustes, vendas e contatos.
-                      Proprietários também acessam compras, custos, financeiro,
-                      relatórios e administração.
+                      O código fornecido pelo responsável libera todos os
+                      módulos. Não é necessário cadastrar e-mail. Cada sessão
+                      dura até 12 horas.
                     </p>
-                    <Grid
-                      heads={['E-mail', 'Perfil', 'Situação', '']}
-                      rows={s.members
-                        .filter((m) => matches(m.email))
-                        .map((m) => [
-                          m.email,
-                          m.role === 'owner' ? 'Proprietário' : 'Funcionário',
-                          <Badge tone={m.active ? 'green' : 'neutral'}>
-                            {m.active ? 'Ativo' : 'Desativado'}
-                          </Badge>,
-                          <button
-                            className="text-button"
-                            onClick={() => open('member', m)}
-                          >
-                            Editar acesso
-                          </button>,
-                        ])}
-                    />
+                    <p className="chart-caption">
+                      O nome no histórico é informado pela própria pessoa ao
+                      entrar. Como o código é compartilhado, ele não comprova a
+                      identidade individual.
+                    </p>
                   </div>
                   <section className="panel lower-panel">
                     <div className="panel-heading">
@@ -2165,34 +2173,6 @@ export default function Workspace() {
                     {field('phone', 'Telefone', 'tel', false)}
                     {field('email', 'E-mail', 'email', false)}
                   </div>
-                </>
-              )}
-              {modal === 'member' && (
-                <>
-                  {field('email', 'E-mail da conta ChatGPT', 'email')}
-                  <Picker
-                    label="Perfil"
-                    value={f.role}
-                    onChange={(v) => set('role', v)}
-                    options={[
-                      { value: 'employee', label: 'Funcionário' },
-                      {
-                        value: 'owner',
-                        label: 'Proprietário — acesso completo',
-                      },
-                    ]}
-                  />
-                  <label className="check-field">
-                    <Checkbox
-                      checked={f.active !== false}
-                      onCheckedChange={(v) => set('active', v === true)}
-                    />
-                    Acesso ativo
-                  </label>
-                  <p className="hint">
-                    Além desta permissão, a pessoa precisa ter acesso ao
-                    aplicativo na plataforma de hospedagem.
-                  </p>
                 </>
               )}
               {modal === 'import' && (

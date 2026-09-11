@@ -1,5 +1,4 @@
-import { env } from 'cloudflare:workers';
-import { getChatGPTUser } from '@/app/chatgpt-auth';
+import { currentAccess } from '@/lib/access';
 import { loadStore, saveStore } from '@/lib/store';
 import { applyCommand, redact, type Actor } from '@/lib/domain';
 export const dynamic = 'force-dynamic';
@@ -12,23 +11,10 @@ function reply(body: unknown, status = 200) {
     },
   });
 }
-async function context() {
-  const user = await getChatGPTUser();
-  if (!user) throw new Error('AUTH');
+async function context(request: Request) {
+  const session = await currentAccess(request);
   const data = await loadStore();
-  const email = user.email.toLowerCase();
-  const configured = (
-    env as unknown as { OWNER_EMAIL?: string }
-  ).OWNER_EMAIL?.toLowerCase();
-  const owner =
-    process.env.NODE_ENV === 'development' ? 'seedy@sites.test' : configured;
-  const member = data.state.members.find((m) => m.email === email && m.active);
-  if (email !== owner && !member) throw new Error('FORBIDDEN');
-  const actor: Actor = {
-    email,
-    role: email === owner ? 'owner' : member!.role,
-  };
-  return { ...data, actor, name: user.displayName };
+  return { ...data, ...session };
 }
 function error(e: unknown) {
   const message = e instanceof Error ? e.message : 'Erro inesperado.';
@@ -37,8 +23,7 @@ function error(e: unknown) {
   if (message === 'FORBIDDEN')
     return reply(
       {
-        error:
-          'Seu e-mail ainda não tem acesso à loja. Solicite a liberação ao proprietário.',
+        error: 'Acesso não autorizado.',
       },
       403,
     );
@@ -60,10 +45,15 @@ function error(e: unknown) {
     400,
   );
 }
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { state, version, actor, name } = await context();
-    return reply({ state: redact(state, actor), version, actor, name });
+    const { state, version, actor, name } = await context(request);
+    return reply({
+      state: { ...redact(state, actor), members: [] },
+      version,
+      actor,
+      name,
+    });
   } catch (e) {
     return error(e);
   }
@@ -78,14 +68,27 @@ export async function POST(request: Request) {
     if (raw.length > 1000000)
       return reply({ error: 'Arquivo muito grande.' }, 413);
     const command = JSON.parse(raw);
-    const { state, version, actor, name } = await context();
+    if (command?.type === 'member')
+      return reply(
+        {
+          error:
+            'O acesso é compartilhado por código. Não há cadastro por e-mail.',
+        },
+        400,
+      );
+    const { state, version, actor, name } = await context(request);
     if (state.processed.includes(command.id))
-      return reply({ state: redact(state, actor), version, actor, name });
+      return reply({
+        state: { ...redact(state, actor), members: [] },
+        version,
+        actor,
+        name,
+      });
     if (command.version !== version) throw new Error('CONFLICT');
     const next = applyCommand(state, command, actor);
     await saveStore(state, next, version);
     return reply({
-      state: redact(next, actor),
+      state: { ...redact(next, actor), members: [] },
       version: version + 1,
       actor,
       name,

@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { loadFrom, saveTo } from './store-core';
 import type { State } from './domain';
-function database() {
+export function database() {
   const db = (env as unknown as { DB: D1Database }).DB;
   if (!db) throw new Error('Banco não configurado.');
   return db;

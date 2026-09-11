@@ -12,7 +12,7 @@ npm run db:local
 npm run dev
 ```
 
-Abra o endereço informado pelo servidor e clique em **Entrar com ChatGPT**. O plugin Sites usa uma identidade simulada **somente no desenvolvimento local** (`seedy@sites.test`). Os dados persistem em `app/.wrangler/` e nunca devem ser versionados. Não exponha o servidor de desenvolvimento à internet.
+Antes de iniciar, configure `ACCESS_CODE` (4 a 32 caracteres) e `ACCESS_SESSION_SECRET` (ao menos 32 caracteres aleatórios) em `app/.dev.vars`, arquivo ignorado pelo Git. Abra o endereço informado pelo servidor e entre com o código configurado. Os dados persistem em `app/.wrangler/` e nunca devem ser versionados. Não exponha o servidor de desenvolvimento à internet.
 
 ## Funcionalidades
 
@@ -23,16 +23,22 @@ Abra o endereço informado pelo servidor e clique em **Entrar com ChatGPT**. O p
 - Cancelamento/devolução integral com reversão de estoque, pagamentos e taxas. Só confirme quando o reembolso e a devolução física estiverem concluídos.
 - Contas a pagar e receber, baixas parciais, taxas, contas de caixa/banco e transferências.
 - Painel de caixa, alertas, relatórios por período e exportações CSV.
-- Clientes/fornecedores, perfis de proprietário e funcionário, auditoria e exportação JSON.
+- Clientes/fornecedores, acesso completo compartilhado por código, auditoria e exportação JSON.
 - Importação CSV de até 500 produtos novos por arquivo, validada atomicamente.
 
 ## Autenticação e publicação
 
-A aplicação usa autenticação da plataforma Sites/ChatGPT. Em produção, configure `OWNER_EMAIL` no ambiente de hospedagem com o e-mail do proprietário. A variável não é salva no Git. Sem essa configuração, nenhum visitante recebe automaticamente acesso de proprietário.
+A entrada usa um código compartilhado, validado exclusivamente no servidor. Configure `ACCESS_CODE` e `ACCESS_SESSION_SECRET` como segredos no ambiente Sites. Todas as pessoas com o código têm acesso completo, inclusive ao financeiro, administração e exportações. Não há cadastro ou filtro por e-mail.
 
-A API valida a identidade encaminhada pelo gateway confiável e uma lista de membros no banco. **Não hospede este Worker diretamente atrás de um proxy que aceite cabeçalhos de identidade enviados pelo visitante.** Fora do Sites, será necessária uma integração de autenticação confiável equivalente.
+A sessão dura 12 horas e usa um cookie HttpOnly, Secure em produção e SameSite=Strict. O banco guarda apenas o hash do token. Sair revoga a sessão; alterar o código ou o segredo invalida as sessões existentes. Há um limite de cinco tentativas por endereço IP a cada 15 minutos. O nome informado na entrada é opcional e autodeclarado: identifica os registros, mas não comprova identidade individual.
 
-A liberação de funcionários requer tanto o compartilhamento do aplicativo na hospedagem quanto o cadastro do mesmo e-mail em Administração. O perfil funcionário não recebe custos, compras, contas, pagamentos ou relatórios financeiros na resposta da API.
+Para permitir visitantes sem conta ChatGPT, a audiência do Sites deve ser pública depois da publicação desta proteção. As APIs de dados continuam exigindo uma sessão válida. Nenhum código de acesso real deve ser versionado.
+
+## Instalar como aplicativo
+
+Na tela de entrada ou no cabeçalho, use **Instalar aplicativo** no Chrome ou Edge. A instalação cria um ícone e uma janela própria, mantendo o mesmo endereço publicado. Quando a instalação direta não estiver disponível, o botão apresenta as instruções do navegador. No iPhone, use Compartilhar → Adicionar à Tela de Início.
+
+A operação exige internet. O service worker guarda somente a página de indisponibilidade e os ícones; dados financeiros, estoque e respostas da API não são armazenados no cache offline.
 
 A configuração de hospedagem está em `app/.openai/hosting.json`, e as migrações em `app/drizzle/`. O build gera um Worker Cloudflare e assets. O banco D1 é provisionado pela plataforma na publicação; nenhum dado da loja é armazenado no repositório.
 
@@ -50,7 +56,7 @@ npm run typecheck
 npm run build
 ```
 
-Os testes cobrem regras de negócio, importação, permissões, persistência SQLite e conflitos de concorrência. O GitHub Actions executa testes, tipos e build a cada push/PR.
+Os testes cobrem regras de negócio, importação, permissões, sessões, limite de tentativas, instalação, persistência SQLite e conflitos de concorrência. O GitHub Actions executa testes, tipos e build a cada push/PR.
 
 ## Limites desta versão
 
