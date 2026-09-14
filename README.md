@@ -19,6 +19,7 @@ Antes de iniciar, configure `ACCESS_CODE` (4 a 32 caracteres) e `ACCESS_SESSION_
 - Produtos por SKU/variação, categoria, fornecedor, foto por URL HTTPS, custo, preço e mínimo.
 - Histórico de estoque, ajustes com motivo e bloqueio de estoque negativo.
 - Compras com múltiplos itens, parcelas, recebimentos parciais e custo médio ponderado.
+- Serviços com descrição, quantidade e valor em compras e vendas, inclusive operações mistas, sem movimentação de estoque.
 - Vendas com desconto, parcelas, forma de pagamento e baixa integrada de estoque.
 - Cancelamento/devolução integral com reversão de estoque, pagamentos e taxas. Só confirme quando o reembolso e a devolução física estiverem concluídos.
 - Contas a pagar e receber, baixas parciais, taxas, contas de caixa/banco e transferências.
@@ -69,3 +70,5 @@ A aplicação carrega o conjunto de registros da loja para compor os painéis. A
 
 A ferramenta opcional WebMCP de consulta de estoque é registrada por detecção de suporte. Não houve validação em navegador com WebMCP disponível.
 
+
+Serviços comprados compõem as despesas operacionais pela data da operação; seu pagamento segue as contas a pagar. Itens antigos sem tipo continuam sendo produtos. O recebimento de mercadorias ignora serviços.

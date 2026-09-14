@@ -591,7 +591,24 @@ export default function Workspace() {
   const reportEntries = s.entries.filter(
     (e) => e.date >= start && e.date <= end && e.kind !== 'transfer',
   );
+  const purchasedServices = s.orders
+    .filter(
+      (o) =>
+        o.type === 'purchase' &&
+        o.status !== 'cancelled' &&
+        o.date >= start &&
+        o.date <= end,
+    )
+    .reduce(
+      (sum, o) =>
+        sum +
+        o.items
+          .filter((i) => i.kind === 'service')
+          .reduce((v, i) => v + i.qty * i.unit, 0),
+      0,
+    );
   const operationalExpenses =
+    purchasedServices +
     s.bills
       .filter(
         (b) =>
@@ -1820,16 +1837,18 @@ export default function Workspace() {
               </p>
               <Grid
                 heads={[
-                  'Produto',
+                  'Produto / serviço',
                   'Quantidade',
                   'Unitário',
                   ...(detail.type === 'purchase' ? ['Recebido'] : []),
                 ]}
                 rows={detail.items.map((i) => [
-                  i.name,
+                  (i.kind === 'service' ? 'Serviço · ' : '') + i.name,
                   i.qty,
                   money(i.unit),
-                  ...(detail.type === 'purchase' ? [i.received] : []),
+                  ...(detail.type === 'purchase'
+                    ? [i.kind === 'service' ? 'Não se aplica' : i.received]
+                    : []),
                 ])}
               />
               <div className="metric-row">
@@ -1839,16 +1858,21 @@ export default function Workspace() {
               <div className="row-actions">
                 {isOwner &&
                   detail.type === 'purchase' &&
+                  detail.items.some(
+                    (i) => i.kind !== 'service' && i.received < i.qty,
+                  ) &&
                   !['cancelled', 'received'].includes(detail.status) && (
                     <button
                       className="primary"
                       onClick={() =>
                         open('receive', {
                           orderId: detail.id,
-                          items: detail.items.map((i) => ({
-                            productId: i.productId,
-                            qty: i.qty - i.received,
-                          })),
+                          items: detail.items
+                            .filter((i) => i.kind !== 'service')
+                            .map((i) => ({
+                              productId: i.productId,
+                              qty: i.qty - i.received,
+                            })),
                         })
                       }
                     >
@@ -1933,35 +1957,86 @@ export default function Workspace() {
                       <option key={c.id} value={c.name} />
                     ))}
                   </datalist>
+                  <p className="hint">
+                    Adicione produtos ou serviços. Serviços não movimentam
+                    estoque; o pagamento segue as mesmas opções da operação.
+                  </p>
                   <div className="order-items">
                     {f.items?.map((item: any, index: number) => (
                       <div className="order-item" key={index}>
-                        <Picker
-                          label="Produto / variação"
-                          value={item.productId}
-                          options={selection}
-                          onChange={(v) => {
-                            const p = s.products.find((p) => p.id === v);
-                            set(
-                              'items',
-                              f.items.map((x: any, j: number) =>
-                                j === index
-                                  ? {
-                                      ...x,
-                                      productId: v,
-                                      unit: val(
-                                        modal === 'sale'
-                                          ? p?.price || 0
-                                          : p?.cost || 0,
-                                      ),
-                                    }
-                                  : x,
-                              ),
-                            );
-                          }}
-                        />
+                        <div className="item-kind">
+                          <Picker
+                            label="Tipo de item"
+                            value={item.kind || 'product'}
+                            options={[
+                              { value: 'product', label: 'Produto' },
+                              { value: 'service', label: 'Serviço' },
+                            ]}
+                            onChange={(kind) =>
+                              set(
+                                'items',
+                                f.items.map((x: any, j: number) =>
+                                  j === index
+                                    ? {
+                                        kind,
+                                        productId: '',
+                                        name: '',
+                                        qty: 1,
+                                        unit: '',
+                                      }
+                                    : x,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                        {item.kind === 'service' ? (
+                          <label className="field">
+                            <span>Descrição do serviço</span>
+                            <input
+                              required
+                              maxLength={200}
+                              value={item.name || ''}
+                              onChange={(e) =>
+                                set(
+                                  'items',
+                                  f.items.map((x: any, j: number) =>
+                                    j === index
+                                      ? { ...x, name: e.target.value }
+                                      : x,
+                                  ),
+                                )
+                              }
+                            />
+                          </label>
+                        ) : (
+                          <Picker
+                            label="Produto / variação"
+                            value={item.productId}
+                            options={selection}
+                            onChange={(v) => {
+                              const p = s.products.find((p) => p.id === v);
+                              set(
+                                'items',
+                                f.items.map((x: any, j: number) =>
+                                  j === index
+                                    ? {
+                                        ...x,
+                                        productId: v,
+                                        unit: val(
+                                          modal === 'sale'
+                                            ? p?.price || 0
+                                            : p?.cost || 0,
+                                        ),
+                                      }
+                                    : x,
+                                ),
+                              );
+                            }}
+                          />
+                        )}
                         <label className="field">
-                          <span>Unidades</span>
+                          <span>Quantidade</span>
                           <input
                             type="number"
                             min="1"
@@ -2019,6 +2094,24 @@ export default function Workspace() {
                       </div>
                     ))}
                   </div>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() =>
+                      set('items', [
+                        ...f.items,
+                        {
+                          kind: 'service',
+                          productId: '',
+                          name: '',
+                          qty: 1,
+                          unit: '',
+                        },
+                      ])
+                    }
+                  >
+                    + Adicionar serviço
+                  </button>
                   <button
                     className="text-button"
                     type="button"
@@ -2087,28 +2180,30 @@ export default function Workspace() {
               )}
               {modal === 'receive' && (
                 <>
-                  {detail?.items.map((item, index) => (
-                    <label className="field" key={item.productId}>
-                      <span>
-                        {item.name} · faltam {item.qty - item.received} un.
-                      </span>
-                      <input
-                        type="number"
-                        min="0"
-                        max={item.qty - item.received}
-                        step="1"
-                        value={f.items[index]?.qty ?? 0}
-                        onChange={(e) =>
-                          set(
-                            'items',
-                            f.items.map((x: any, j: number) =>
-                              j === index ? { ...x, qty: e.target.value } : x,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                  ))}
+                  {detail?.items
+                    .filter((i) => i.kind !== 'service')
+                    .map((item, index) => (
+                      <label className="field" key={item.productId}>
+                        <span>
+                          {item.name} · faltam {item.qty - item.received} un.
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={item.qty - item.received}
+                          step="1"
+                          value={f.items[index]?.qty ?? 0}
+                          onChange={(e) =>
+                            set(
+                              'items',
+                              f.items.map((x: any, j: number) =>
+                                j === index ? { ...x, qty: e.target.value } : x,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                    ))}
                 </>
               )}
               {(modal === 'cancel' || modal === 'cancelBill') && (

@@ -1079,3 +1079,5 @@ td strong {
   font-size: 14px;
 }
 .access-form{display:flex;flex-direction:column;gap:18px;text-align:left;max-width:360px;margin:24px auto}.access-form>.primary{width:100%}.access>.install-app{margin:8px auto}.access .form-error{margin:0}.logout{border:0;background:transparent;cursor:pointer}.topbar .install-app{white-space:nowrap}@media(max-width:700px){.topbar .install-app{font-size:0;padding:8px;min-width:38px}.topbar .install-app svg{width:18px;height:18px}}
+
+.order-item .item-kind { grid-column: 1 / -1; }

@@ -339,3 +339,84 @@ test('compras baixam o caixa quando pagas, imediatamente ou na quitação poster
     accountBalance(immediate, accountId),
   );
 });
+
+test('venda de serviço sem produtos gera financeiro e estorna sem estoque', () => {
+  let s = emptyState();
+  s = run(s, 'order', {
+    type: 'sale',
+    items: [{ kind: 'service', name: 'Atendimento', qty: 2, unit: 10000 }],
+    date: '2026-09-14',
+    due: '2026-09-14',
+    settleNow: true,
+    accountId: 'cash',
+  });
+  assert.equal(s.orders[0].total, 20000);
+  assert.equal(accountBalance(s, 'cash'), 20000);
+  assert.equal(s.movements.length, 0);
+  s = run(s, 'cancel', { orderId: s.orders[0].id, reason: 'Cancelado' });
+  assert.equal(accountBalance(s, 'cash'), 0);
+  assert.equal(s.movements.length, 0);
+});
+test('compra mista recebe apenas mercadoria, paga ambos os itens e cancela integralmente', () => {
+  let s = setup();
+  const id = s.products[0].id,
+    stock = s.products[0].stock;
+  s = run(s, 'order', {
+    type: 'purchase',
+    contact: 'Fornecedor',
+    items: [
+      { productId: id, qty: 2, unit: 800 },
+      { kind: 'service', name: 'Entrega', qty: 1, unit: 300 },
+    ],
+    date: '2026-09-14',
+    due: '2026-09-14',
+    settleNow: true,
+    accountId: 'cash',
+  });
+  assert.equal(accountBalance(s, 'cash'), -1900);
+  assert.throws(() =>
+    run(s, 'receive', {
+      orderId: s.orders[0].id,
+      items: [{ productId: '', qty: 1 }],
+    }),
+  );
+  s = run(s, 'receive', {
+    orderId: s.orders[0].id,
+    items: [{ productId: id, qty: 2 }],
+  });
+  assert.equal(s.products[0].stock, stock + 2);
+  assert.equal(s.orders[0].status, 'received');
+  s = run(s, 'cancel', { orderId: s.orders[0].id, reason: 'Devolução' });
+  assert.equal(s.products[0].stock, stock);
+  assert.equal(accountBalance(s, 'cash'), 0);
+});
+test('serviços parcelados validam descrição e valor e não exigem cadastro de produto', () => {
+  const p = {
+    type: 'purchase',
+    contact: 'Prestador',
+    items: [{ kind: 'service', name: 'Manutenção', qty: 1, unit: 10001 }],
+    date: '2026-09-14',
+    due: '2026-09-14',
+    installments: 3,
+  };
+  const s = run(emptyState(), 'order', p);
+  assert.equal(s.bills.length, 3);
+  assert.equal(
+    s.bills.reduce((n, b) => n + b.amount, 0),
+    10001,
+  );
+  assert.equal(s.entries.length, 0);
+  assert.equal(s.movements.length, 0);
+  for (const patch of [
+    { name: '' },
+    { unit: 0 },
+    { qty: 0 },
+    { kind: 'unknown' },
+  ])
+    assert.throws(() =>
+      run(emptyState(), 'order', {
+        ...p,
+        items: [{ ...p.items[0], ...patch }],
+      }),
+    );
+});

@@ -16,6 +16,7 @@ export type Product = {
 };
 export type Account = { id: string; name: string; opening: number };
 export type Item = {
+  kind?: 'product' | 'service';
   productId: string;
   name: string;
   qty: number;
@@ -336,12 +337,28 @@ export function applyCommand(
         throw new Error('Adicione de 1 a 100 itens.');
       const seen = new Set<string>();
       const items: Item[] = p.items.map((i: any) => {
+        if (
+          !i ||
+          (i.kind !== undefined && !['product', 'service'].includes(i.kind))
+        )
+          throw new Error('Tipo de item inválido.');
+        if (i.kind === 'service')
+          return {
+            kind: 'service',
+            productId: '',
+            name: txt(i.name, 'Descrição do serviço'),
+            qty: int(i.qty, 'Quantidade', 1, 1000000),
+            unit: int(i.unit, 'Valor do serviço', 1, 100000000),
+            cost: 0,
+            received: 0,
+          };
         const pr = product(s, i.productId);
         if (!pr.active) throw new Error('Produto inativo.');
         if (seen.has(pr.id))
           throw new Error('Agrupe a quantidade do mesmo produto em uma linha.');
         seen.add(pr.id);
         return {
+          kind: 'product',
           productId: pr.id,
           name: pr.name + ' · ' + pr.variation,
           qty: int(i.qty, 'Quantidade', 1, 1000000),
@@ -379,7 +396,7 @@ export function applyCommand(
         method: txt(p.method || 'Não informado', 'Pagamento'),
       };
       if (o.type === 'sale')
-        for (const i of items)
+        for (const i of items.filter((i) => i.kind !== 'service'))
           move(s, product(s, i.productId), -i.qty, 'Venda ' + o.number, actor);
       s.orders.push(o);
       splitCents(total, installments).forEach((amount, index) => {
@@ -395,7 +412,14 @@ export function applyCommand(
             '/' +
             installments,
           type: o.type === 'sale' ? 'income' : 'expense',
-          category: o.type === 'sale' ? 'Vendas' : 'Mercadorias',
+          category:
+            o.type === 'sale'
+              ? 'Vendas'
+              : items.every((i) => i.kind === 'service')
+                ? 'Serviços'
+                : items.some((i) => i.kind === 'service')
+                  ? 'Mercadorias e serviços'
+                  : 'Mercadorias',
           amount,
           due: monthDate(due, index),
           cancelled: false,
@@ -431,7 +455,8 @@ export function applyCommand(
         if (seen.has(r.productId)) throw new Error('Item duplicado.');
         seen.add(r.productId);
         const item = o.items.find((i) => i.productId === r.productId);
-        if (!item) throw new Error('Item não pertence à compra.');
+        if (!item || item.kind === 'service')
+          throw new Error('Item não é uma mercadoria desta compra.');
         const qty = int(r.qty, 'Recebimento', 0, item.qty - item.received);
         if (!qty) continue;
         const pr = product(s, item.productId);
@@ -443,7 +468,9 @@ export function applyCommand(
         count += qty;
       }
       if (!count) throw new Error('Informe pelo menos uma unidade.');
-      o.status = o.items.every((i) => i.received === i.qty)
+      o.status = o.items
+        .filter((i) => i.kind !== 'service')
+        .every((i) => i.received === i.qty)
         ? 'received'
         : 'partial';
       summary = o.number;
@@ -457,6 +484,7 @@ export function applyCommand(
         throw new Error('Operação já cancelada ou inexistente.');
       const reason = txt(p.reason, 'Motivo');
       for (const i of o.items) {
+        if (i.kind === 'service') continue;
         const pr = product(s, i.productId);
         const qty = o.type === 'sale' ? i.qty : -i.received;
         if (qty) {
