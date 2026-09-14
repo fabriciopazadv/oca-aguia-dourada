@@ -53,7 +53,7 @@ export type Entry = {
   fee: number;
   date: string;
   description: string;
-  kind: 'payment' | 'fee' | 'transfer' | 'reversal';
+  kind: 'payment' | 'fee' | 'transfer' | 'reversal' | 'withdrawal';
   reverses?: string;
 };
 export type Movement = {
@@ -184,6 +184,7 @@ const ownerOnly = new Set([
   'bill',
   'settle',
   'transfer',
+  'withdrawal',
   'member',
   'import',
   'cancelBill',
@@ -516,6 +517,28 @@ export function applyCommand(
       const reason = txt(p.reason, 'Motivo');
       reverseBill(s, b, reason);
       summary = reason;
+      break;
+    }
+    case 'withdrawal': {
+      if (!s.accounts.some((a) => a.id === p.accountId))
+        throw new Error('Selecione uma conta.');
+      const amount = int(p.amount, 'Valor da retirada', 1);
+      const date = validDate(p.date);
+      const recipient = txt(p.recipient, 'Quem recebeu');
+      const note = txt(p.description, 'Observação', false);
+      const description =
+        'Retirada de lucro · ' + recipient + (note ? ' · ' + note : '');
+      s.entries.push({
+        id: uid(),
+        billId: '',
+        accountId: p.accountId,
+        amount: -amount,
+        fee: 0,
+        date,
+        description,
+        kind: 'withdrawal',
+      });
+      summary = description;
       break;
     }
     case 'transfer': {

@@ -403,7 +403,7 @@ export default function Workspace() {
         p.fee = cents(f.fee);
         p.items = f.items.map((i: any) => ({ ...i, unit: cents(i.unit) }));
       }
-      if (['bill', 'settle', 'transfer'].includes(modal)) {
+      if (['bill', 'settle', 'transfer', 'withdrawal'].includes(modal)) {
         p.amount = cents(f.amount);
         p.fee = cents(f.fee);
       }
@@ -653,6 +653,7 @@ export default function Workspace() {
     bill: 'Novo lançamento',
     settle: 'Registrar pagamento',
     account: 'Nova conta',
+    withdrawal: 'Retirada de caixa',
     transfer: 'Transferir entre contas',
     contact: 'Cliente ou fornecedor',
     receive: 'Receber mercadorias',
@@ -1329,6 +1330,12 @@ export default function Workspace() {
                     </Tabs>
                     <button
                       className="secondary"
+                      onClick={() => open('withdrawal')}
+                    >
+                      <Wallet size={16} /> Retirada de caixa
+                    </button>
+                    <button
+                      className="secondary"
                       onClick={() =>
                         open('transfer', {
                           from: s.accounts[0]?.id,
@@ -1343,25 +1350,49 @@ export default function Workspace() {
                       className="secondary"
                       onClick={() =>
                         download(
-                          'financeiro-oca.csv',
-                          exportCSV([
-                            [
-                              'Descrição',
-                              'Tipo',
-                              'Vencimento',
-                              'Valor',
-                              'Em aberto',
-                              'Cancelada',
-                            ],
-                            ...s.bills.map((b) => [
-                              b.description,
-                              b.type,
-                              dateLabel(b.due),
-                              val(b.amount),
-                              val(remaining(s, b)),
-                              b.cancelled ? 'Sim' : 'Não',
-                            ]),
-                          ]),
+                          tab === 'ledger'
+                            ? 'extrato-oca.csv'
+                            : 'financeiro-oca.csv',
+                          exportCSV(
+                            tab === 'ledger'
+                              ? [
+                                  [
+                                    'Data',
+                                    'Descrição',
+                                    'Conta',
+                                    'Movimento',
+                                    'Valor',
+                                  ],
+                                  ...s.entries.map((e) => [
+                                    dateLabel(e.date),
+                                    e.description,
+                                    s.accounts.find((a) => a.id === e.accountId)
+                                      ?.name || '',
+                                    e.kind === 'withdrawal'
+                                      ? 'Retirada de lucro'
+                                      : e.kind,
+                                    val(e.amount),
+                                  ]),
+                                ]
+                              : [
+                                  [
+                                    'Descrição',
+                                    'Tipo',
+                                    'Vencimento',
+                                    'Valor',
+                                    'Em aberto',
+                                    'Cancelada',
+                                  ],
+                                  ...s.bills.map((b) => [
+                                    b.description,
+                                    b.type,
+                                    dateLabel(b.due),
+                                    val(b.amount),
+                                    val(remaining(s, b)),
+                                    b.cancelled ? 'Sim' : 'Não',
+                                  ]),
+                                ],
+                          ),
                         )
                       }
                     >
@@ -1483,13 +1514,15 @@ export default function Workspace() {
                             dateLabel(e.date),
                             e.description,
                             s.accounts.find((a) => a.id === e.accountId)?.name,
-                            e.kind === 'transfer'
-                              ? 'Transferência'
-                              : e.kind === 'reversal'
-                                ? 'Estorno'
-                                : e.kind === 'fee'
-                                  ? 'Taxa'
-                                  : 'Pagamento',
+                            e.kind === 'withdrawal'
+                              ? 'Retirada de lucro'
+                              : e.kind === 'transfer'
+                                ? 'Transferência'
+                                : e.kind === 'reversal'
+                                  ? 'Estorno'
+                                  : e.kind === 'fee'
+                                    ? 'Taxa'
+                                    : 'Pagamento',
                             <strong
                               className={
                                 e.amount >= 0 ? 'positive' : 'negative'
@@ -1735,6 +1768,7 @@ export default function Workspace() {
                               cancel: 'Estorno',
                               settle: 'Pagamento',
                               bill: 'Lançamento',
+                              withdrawal: 'Retirada de caixa',
                               transfer: 'Transferência',
                               member: 'Acesso',
                               contact: 'Contato',
@@ -2134,6 +2168,27 @@ export default function Workspace() {
                   <p className="hint">
                     O saldo inicial compõe o disponível sem ser contado como
                     receita.
+                  </p>
+                </>
+              )}
+              {modal === 'withdrawal' && (
+                <>
+                  <div className="form-grid">
+                    <Picker
+                      label="Conta de origem"
+                      value={f.accountId}
+                      onChange={(v) => set('accountId', v)}
+                      options={accountOptions}
+                    />
+                    {field('amount', 'Valor retirado (R$)', 'number')}
+                    {field('date', 'Data da retirada', 'date')}
+                    {field('recipient', 'Quem recebeu')}
+                  </div>
+                  {field('description', 'Observação', 'text', false)}
+                  <p className="hint">
+                    Registre somente valores já retirados. A retirada será
+                    descontada imediatamente da conta e aparecerá no extrato
+                    como retirada de lucro.
                   </p>
                 </>
               )}

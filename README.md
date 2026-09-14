@@ -22,6 +22,7 @@ Antes de iniciar, configure `ACCESS_CODE` (4 a 32 caracteres) e `ACCESS_SESSION_
 - Vendas com desconto, parcelas, forma de pagamento e baixa integrada de estoque.
 - Cancelamento/devolução integral com reversão de estoque, pagamentos e taxas. Só confirme quando o reembolso e a devolução física estiverem concluídos.
 - Contas a pagar e receber, baixas parciais, taxas, contas de caixa/banco e transferências.
+- Retirada de caixa como lucro, com valor, data, conta e recebedor; baixa imediata e histórico no extrato.
 - Painel de caixa, alertas, relatórios por período e exportações CSV.
 - Clientes/fornecedores, acesso completo compartilhado por código, auditoria e exportação JSON.
 - Importação CSV de até 500 produtos novos por arquivo, validada atomicamente.

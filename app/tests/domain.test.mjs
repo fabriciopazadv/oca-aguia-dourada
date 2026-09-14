@@ -270,3 +270,72 @@ test('funcionário registra a venda mas não pode quitar o recebível', () => {
     /Permissão/,
   );
 });
+
+test('retirada de lucro reduz apenas o caixa selecionado e não cria despesa operacional', () => {
+  const s = setup();
+  const id = s.accounts[0].id;
+  const command = {
+    id: crypto.randomUUID(),
+    type: 'withdrawal',
+    payload: {
+      accountId: id,
+      amount: 12345,
+      date: '2026-09-14',
+      recipient: 'Responsável',
+      description: 'Retirada semanal',
+    },
+  };
+  const next = applyCommand(s, command, owner);
+  assert.equal(accountBalance(next, id), accountBalance(s, id) - 12345);
+  assert.equal(next.entries.at(-1).kind, 'withdrawal');
+  assert.match(next.entries.at(-1).description, /Responsável/);
+  assert.deepEqual(next.bills, s.bills);
+  assert.deepEqual(next.products, s.products);
+  assert.equal(
+    applyCommand(next, command, owner).entries.length,
+    next.entries.length,
+  );
+  for (const patch of [
+    { amount: 0 },
+    { amount: -1 },
+    { amount: 1.5 },
+    { accountId: 'missing' },
+    { recipient: '' },
+  ]) {
+    assert.throws(() => run(s, 'withdrawal', { ...command.payload, ...patch }));
+  }
+  assert.throws(() => run(s, 'withdrawal', command.payload, employee));
+});
+test('compras baixam o caixa quando pagas, imediatamente ou na quitação posterior', () => {
+  const initial = setup(),
+    accountId = initial.accounts[0].id;
+  const purchase = {
+    type: 'purchase',
+    contact: 'Fornecedor',
+    items: [{ productId: initial.products[0].id, qty: 2, unit: 1500 }],
+    date: '2026-09-14',
+    due: '2026-09-14',
+    installments: 1,
+    accountId,
+  };
+  const immediate = run(initial, 'order', { ...purchase, settleNow: true });
+  assert.equal(
+    accountBalance(immediate, accountId),
+    accountBalance(initial, accountId) - 3000,
+  );
+  let later = run(initial, 'order', purchase);
+  assert.equal(
+    accountBalance(later, accountId),
+    accountBalance(initial, accountId),
+  );
+  later = run(later, 'settle', {
+    billId: later.bills.at(-1).id,
+    accountId,
+    amount: 3000,
+    date: '2026-09-14',
+  });
+  assert.equal(
+    accountBalance(later, accountId),
+    accountBalance(immediate, accountId),
+  );
+});
